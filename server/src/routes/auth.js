@@ -1,8 +1,6 @@
 const router = require('express').Router();
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
-const { LOCAL_PIN } = require('../utils');
-const { addLog, userView } = require('../services');
 
 const check = b => {
   const name = String(b.name || '').trim(), phone = String(b.phone || '').trim(), pincode = String(b.pincode || '').trim();
@@ -27,21 +25,15 @@ router.post('/verify', async (req, res) => {
   if (v.error) return res.status(400).json({ error: v.error });
   if (String(body.otp || '').trim() !== DEMO_OTP()) return res.status(400).json({ error: 'That code is incorrect. Use the demo code shown above.' });
 
-  const local = LOCAL_PIN.test(v.pincode);
   const admins = (process.env.ADMIN_PHONES || '').split(',').map(s => s.trim()).filter(Boolean);
-  let user = await User.findOne({ phone: v.phone });
-  if (!user) {
-    user = new User({ name: v.name, phone: v.phone, pincode: v.pincode, local, done: local ? 9 : 0, streak: local ? 4 : 0 });
-    if (local) { addLog(user, 'Verified as Ujjain local'); addLog(user, '9 earlier check-ins imported (demo history)'); }
-    else addLog(user, 'Verified as visitor');
-  } else {
-    user.name = v.name; user.pincode = v.pincode; user.local = local;
-  }
-  user.role = admins.includes(v.phone) ? 'admin' : 'devotee';
-  await user.save();
-
+  const role = admins.includes(v.phone) ? 'admin' : 'devotee';
+  const user = await User.findOneAndUpdate(
+    { phone: v.phone },
+    { $set: { name: v.name, pincode: v.pincode, role }, $setOnInsert: { phone: v.phone } },
+    { upsert: true, new: true }
+  );
   const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: userView(user) });
+  res.json({ token });
 });
 
 module.exports = router;

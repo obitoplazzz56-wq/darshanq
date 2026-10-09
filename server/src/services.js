@@ -1,38 +1,54 @@
 const crypto = require('crypto');
-const { Booking, Config } = require('./models');
+const { Booking, Config, Standing } = require('./models');
+const { BY_ID } = require('./temples');
 const U = require('./utils');
 
-const getConfig = () => Config.findOneAndUpdate({ key: 'main' }, { $setOnInsert: { key: 'main' } }, { upsert: true, new: true });
+const getConfig = t => Config.findOneAndUpdate({ key: t.id }, { $setOnInsert: { key: t.id } }, { upsert: true, new: true });
 
-// total places used per slot (all devotees) for a date
-async function usedByDate(date) {
+// total places used per slot (all devotees) for a temple + date
+async function usedByDate(t, date) {
   const rows = await Booking.aggregate([
-    { $match: { date, status: { $in: ['booked', 'done'] } } },
+    { $match: { temple: t.id, date, status: { $in: ['booked', 'done'] } } },
     { $group: { _id: '$slot', n: { $sum: '$party' } } },
   ]);
   const m = {};
   rows.forEach(r => { m[r._id] = r.n; });
   return m;
 }
-const placesLeft = (cap, date, i, used) => cap - U.seededTaken(date, i) - (used[i] || 0);
+const placesLeft = (t, cap, date, i, used) => cap - U.seededTaken(t, date, i) - (used[i] || 0);
 
 const newCode = () => 'dq' + crypto.randomBytes(3).toString('hex');
+const addLog = (s, text) => { s.log.unshift({ t: text, at: new Date() }); if (s.log.length > 50) s.log.length = 50; };
 
-const addLog = (u, t) => { u.log.unshift({ t, at: new Date() }); if (u.log.length > 50) u.log.length = 50; };
+// Find (or create) this devotee's record at this temple. Local devotees start with demo history unless DEMO_MODE=false.
+async function getStanding(user, t) {
+  let s = await Standing.findOne({ user: user._id, temple: t.id });
+  if (s) return s;
+  const local = U.isLocal(user.pincode, t);
+  const seed = local && process.env.DEMO_MODE !== 'false';
+  s = new Standing({ user: user._id, temple: t.id, done: seed ? 9 : 0, streak: seed ? 4 : 0 });
+  addLog(s, local ? `Verified as ${t.city} local` : 'Verified as visitor');
+  if (seed) addLog(s, '9 earlier check-ins imported (demo history)');
+  try { await s.save(); } catch (e) { s = await Standing.findOne({ user: user._id, temple: t.id }); } // parallel first requests
+  return s;
+}
 
-const userView = u => {
-  const s = U.score(u);
+const userView = (u, s, t) => {
+  const local = U.isLocal(u.pincode, t), sc = U.score(s, local);
   return {
-    id: u._id, name: u.name, phone: u.phone, pincode: u.pincode, local: u.local, role: u.role,
-    done: u.done, streak: u.streak, ns: u.ns, lc: u.lc, score: s, tier: U.tier(s), eligible: U.eligible(u),
-    prefs: u.prefs, log: u.log.slice(0, 30),
+    id: u._id, name: u.name, phone: u.phone, pincode: u.pincode, role: u.role, temple: t.id,
+    local, done: s.done, streak: s.streak, ns: s.ns, lc: s.lc, score: sc, tier: U.tier(sc), eligible: local && sc >= 60,
+    prefs: u.prefs, log: s.log.slice(0, 30),
   };
 };
 
-const bookingView = b => ({
-  id: b.code, date: b.date, slot: b.slot, party: b.party, assist: b.assist, status: b.status,
-  when: U.dayLabel(b.date), time: U.tm(U.SL[b.slot]), checkinOpens: U.tm(U.SL[b.slot] - .5),
-  waitMin: U.localWait(U.SL[b.slot]), startsAt: U.slotStart(b.date, b.slot).toISOString(),
-});
+const bookingView = b => {
+  const t = BY_ID[b.temple], h = t.slots[b.slot];
+  return {
+    id: b.code, temple: t.id, templeName: t.name, date: b.date, slot: b.slot, party: b.party, assist: b.assist, status: b.status,
+    when: U.dayLabel(b.date), time: U.tm(h), checkinOpens: U.tm(h - .5),
+    waitMin: U.localWait(t, h), startsAt: U.slotStart(t, b.date, b.slot).toISOString(),
+  };
+};
 
-module.exports = { getConfig, usedByDate, placesLeft, newCode, addLog, userView, bookingView };
+module.exports = { getConfig, usedByDate, placesLeft, newCode, addLog, getStanding, userView, bookingView };

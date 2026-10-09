@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('./models');
+const { BY_ID, DEFAULT_ID } = require('./temples');
 
 exports.auth = async (req, res, next) => {
   try {
@@ -18,3 +19,12 @@ exports.auth = async (req, res, next) => {
 
 exports.admin = (req, res, next) =>
   req.user.role === 'admin' ? next() : res.status(403).json({ error: 'Temple admin access only.' });
+
+// Resolves ?temple=<id> (or body.temple) into req.temple. Defaults to the first temple.
+exports.temple = (req, res, next) => {
+  const id = req.query.temple || (req.body && req.body.temple) || DEFAULT_ID;
+  const t = BY_ID[id];
+  if (!t) return res.status(400).json({ error: 'Unknown temple.' });
+  req.temple = t;
+  next();
+};
