@@ -18,15 +18,16 @@ export function Modal({ open, onClose, children }) {
 }
 
 // Live crowd numbers + hourly forecast, refreshed every 5s
-export function useCrowd(festival) {
+export function useCrowd(tid, festival) {
   const [c, setC] = useState(null);
   useEffect(() => {
     let on = true;
-    const load = () => api.crowd(festival).then(d => on && setC(d)).catch(() => {});
+    setC(null);
+    const load = () => api.crowd(tid, festival).then(d => on && setC(d)).catch(() => {});
     load();
     const t = setInterval(load, 5000);
     return () => { on = false; clearInterval(t); };
-  }, [festival]);
+  }, [tid, festival]);
   return c;
 }
 

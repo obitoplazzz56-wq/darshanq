@@ -5,20 +5,20 @@ import { useApp } from '../App.jsx';
 const LABEL = { booked: 'Booked', done: 'Checked in', noshow: 'No-show', cancelled: 'Cancelled' };
 
 export default function Admin({ onConfig }) {
-  const { toast } = useApp();
+  const { toast, tid } = useApp();
   const [d, setD] = useState(null), [an, setAn] = useState('');
 
-  const load = useCallback(() => api.dashboard().then(x => { setD(x); setAn(x.config.announcement); }).catch(e => toast(e.message)), [toast]);
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(() => api.dashboard(tid).then(x => { setD(x); setAn(x.config.announcement); }).catch(e => toast(e.message)), [toast, tid]);
+  useEffect(() => { setD(null); load(); }, [load]);
 
   const update = async (patch, msg) => {
-    try { await api.setConfig(patch); toast(msg); await load(); onConfig(); } catch (e) { toast(e.message); }
+    try { await api.setConfig(patch, tid); toast(msg); await load(); onConfig(); } catch (e) { toast(e.message); }
   };
   const noShow = async id => { try { await api.noShow(id); toast('No-show recorded. Trust score −10, place released.'); load(); } catch (e) { toast(e.message); } };
   const exportCsv = async () => {
     try {
-      const url = URL.createObjectURL(await api.exportCsv());
-      const a = document.createElement('a'); a.href = url; a.download = 'darshanq-bookings.csv'; a.click(); URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(await api.exportCsv(tid));
+      const a = document.createElement('a'); a.href = url; a.download = `darshanq-${tid}-bookings.csv`; a.click(); URL.revokeObjectURL(url);
     } catch (e) { toast(e.message); }
   };
 
@@ -26,7 +26,7 @@ export default function Admin({ onConfig }) {
   const { config: c, stats } = d;
   return (
     <>
-      <div className="row sp"><h2>Operations dashboard</h2><span className="pill">Live</span></div>
+      <div className="row sp"><h2>Operations dashboard · {d.temple}</h2><span className="pill">Live</span></div>
       <div className="g4" style={{ marginTop: 14 }}>
         <div className="card"><div className="sm mut">General queue</div><b className="big">{d.queue.toLocaleString('en-IN')}</b></div>
         <div className="card"><div className="sm mut">Local bookings today</div><b className="big">{stats.bookingsToday}</b></div>

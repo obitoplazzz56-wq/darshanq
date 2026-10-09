@@ -37,21 +37,21 @@ function QR({ id }) {
 const STATUS = { booked: 'Reserved', done: 'Visit completed', noshow: 'No-show', cancelled: 'Cancelled' };
 
 function Pass({ b, live, after }) {
-  const { toast, refresh } = useApp();
+  const { toast, refresh, setTid } = useApp();
   const P = usePortal();
 
   const checkin = async simulate => {
     try {
       await api.checkin(b.id, simulate);
       toast('Check-in recorded.');
-      await refresh(); after(); P.askReport();
+      await refresh(); after(); P.askReport(b.temple);
     } catch (e) {
       if (e.code === 'OUTSIDE_WINDOW' && !simulate) { if (window.confirm(e.message + '\n\nSimulate being at the temple for the demo?')) checkin(true); }
       else toast(e.message);
     }
   };
   const resched = async () => {
-    try { const r = await api.reschedule(b.id); await refresh(); P.setDay(r.day); P.go('book'); }
+    try { const r = await api.reschedule(b.id); setTid(r.temple); await refresh(); P.setDay(r.day); P.go('book'); }
     catch (e) { toast(e.message); }
   };
   const cancel = async () => {
@@ -67,7 +67,7 @@ function Pass({ b, live, after }) {
       <div style={{ flex: 1, minWidth: 200 }}>
         <span className={`pill ${b.status === 'noshow' || b.status === 'cancelled' ? 'b' : ''}`}>{STATUS[b.status]}</span>
         <h3 style={{ marginTop: 6 }}>{b.when}, {b.time}</h3>
-        <p className="sm mut" style={{ margin: 0 }}>Pass {b.id.toUpperCase()} · Free local lane · ~{b.waitMin} min wait</p>
+        <p className="sm mut" style={{ margin: 0 }}>{b.templeName} · Pass {b.id.toUpperCase()} · Free local lane · ~{b.waitMin} min wait</p>
         {(b.party > 1 || b.assist) && <p className="sm" style={{ margin: '4px 0 0' }}>Party of {b.party}{b.assist ? ', assistance requested' : ''}</p>}
         {live && (
           <div className="row" style={{ marginTop: 12 }}>
@@ -87,9 +87,9 @@ const LogList = ({ items }) => items.map((l, i) => (
 
 /* ---------- views ---------- */
 function Overview({ fs, cfg }) {
-  const { user } = useApp();
+  const { user, temple, tid } = useApp();
   const P = usePortal();
-  const crowd = useCrowd(fs);
+  const crowd = useCrowd(tid, fs);
   const [list, reload] = useBookings();
   const a = nextBooking(list), h = new Date().getHours();
   return (
@@ -97,7 +97,7 @@ function Overview({ fs, cfg }) {
       <div className="row sp">
         <div>
           <h2>Good {h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening'}, {user.name.split(' ')[0]}</h2>
-          <p className="mut">{user.eligible ? 'You can book the free priority lane.' : user.local ? 'Your score is below 60. Complete visits to unlock the free lane.' : 'The free lane is for Ujjain locals. Use the general queue and the forecast below.'}</p>
+          <p className="mut">{user.eligible ? 'You can book the free priority lane.' : user.local ? 'Your score is below 60. Complete visits to unlock the free lane.' : `The free lane at ${temple.name} is for ${temple.city} locals. Use the general queue and the forecast below.`}</p>
         </div>
         <span className={`pill ${user.eligible ? '' : 'w'}`}>{user.eligible ? 'Eligible' : 'Not yet eligible'}</span>
       </div>
@@ -105,7 +105,7 @@ function Overview({ fs, cfg }) {
       <div className="g2" style={{ marginTop: 12 }}>
         <div className="card"><div className="sm mut">Trust score</div><Ring v={user.score} /><p className="sm mut" style={{ textAlign: 'center', margin: 0 }}>{user.tier}</p></div>
         <div className="card">
-          <div className="row sp"><h3>Crowd right now</h3><span className="pill w">High</span></div>
+          <div className="row sp"><h3>Crowd now · {temple.name}</h3><span className="pill w">High</span></div>
           <div className="row" style={{ gap: 24, margin: '14px 0' }}>
             <div><div className="sm mut">Queue</div><b className="big">{crowd ? crowd.queue.toLocaleString('en-IN') : '…'}</b></div>
             <div><div className="sm mut">Wait</div><b className="big">{crowd ? hm(crowd.generalWait) : '…'}</b></div>
@@ -129,33 +129,33 @@ function Overview({ fs, cfg }) {
 }
 
 function Book({ fs, setFs, cfg }) {
-  const { user, toast, refresh } = useApp();
+  const { user, toast, refresh, temple, tid } = useApp();
   const P = usePortal();
   const [data, setData] = useState(null), [sel, setSel] = useState(null);
   const [g, setG] = useState(1), [as, setAs] = useState(false), [err, setErr] = useState('');
   const day = P.day;
 
-  useEffect(() => { api.slots(day, fs).then(setData).catch(e => toast(e.message)); }, [day, fs, toast]);
+  useEffect(() => { setSel(null); api.slots(tid, day, fs).then(setData).catch(e => toast(e.message)); }, [tid, day, fs, toast]);
 
   if (!user.eligible) return (
     <>
       <h2>Reserve a slot</h2>
       <div className="card" style={{ marginTop: 16 }}><h3>Free lane locked</h3>
-        <p className="mut">{user.local ? `Your score is ${user.score}. You need 60. Each completed check-in adds 5.` : 'Priority slots are for verified Ujjain residents (pincode 456001–456010).'}</p></div>
+        <p className="mut">{user.local ? `Your score is ${user.score}. You need 60. Each completed check-in adds 5.` : `Priority slots at ${temple.name} are for verified ${temple.city} residents (matched by pincode).`}</p></div>
     </>
   );
 
   const open = s => { setSel(s); setG(1); setAs(false); setErr(''); };
   const confirm = async () => {
     try {
-      await api.book({ date: data.date, slot: sel.slot, party: g, assist: as });
+      await api.book({ temple: tid, date: data.date, slot: sel.slot, party: g, assist: as });
       setSel(null); toast('Booked. Your pass is ready.'); await refresh(); P.go('passes');
     } catch (e) { setErr(e.message); }
   };
 
   return (
     <>
-      <h2>Reserve free priority darshan</h2>
+      <h2>Reserve free priority darshan · {temple.name}</h2>
       <Banner cfg={cfg} />
       <p className="mut">One booking per day. Check-in opens 30 minutes before your slot.</p>
       <div className="chips">
@@ -209,7 +209,7 @@ function Passes() {
 }
 
 function Trust() {
-  const { user } = useApp();
+  const { user, temple } = useApp();
   const s = user.score;
   const rows = [
     ['Verified local base', user.local ? 30 : 0],
@@ -221,7 +221,7 @@ function Trust() {
   const badges = [['First visit', user.done >= 1], ['5 visits', user.done >= 5], ['10 visits', user.done >= 10], ['4-week streak', user.streak >= 4], ['Clean record', !user.ns && !user.lc]];
   return (
     <>
-      <h2>Trust score</h2>
+      <h2>Trust score · {temple.name}</h2>
       <div className="g2" style={{ marginTop: 12 }}>
         <div className="card"><Ring v={s} /><p style={{ textAlign: 'center' }}><b>{user.tier}</b><br /><span className="sm mut">{s >= 60 ? 'Free lane unlocked.' : `${60 - s} points to unlock.`}</span></p></div>
         <div className="card"><h3>Breakdown</h3><table><tbody>
@@ -236,19 +236,18 @@ function Trust() {
   );
 }
 
-const AARTI = [['Bhasma Aarti', 'about 4:00 AM'], ['Morning pooja', 'about 7:00 AM'], ['Bhog Aarti', 'about 10:00 AM'], ['Sandhya Aarti', 'about 6:45 PM'], ['Shayan Aarti', 'about 10:30 PM']];
 function Aarti({ cfg }) {
-  const { user, setUser, toast } = useApp();
+  const { user, setUser, toast, temple, tid } = useApp();
   const [list] = useBookings();
   const a = nextBooking(list);
   const rem = a ? [`Check-in opens at ${a.checkinOpens}, ${a.when.toLowerCase()}.`, 'Carry the photo ID used at sign-up.', a.party > 1 ? `Your party of ${a.party} must arrive together.` : 'Arrive 15 minutes before your slot.'] : [];
-  const pref = async (k, v) => { try { setUser(await api.setPrefs({ [k]: v })); toast('Preference saved.'); } catch (e) { toast(e.message); } };
+  const pref = async (k, v) => { try { setUser(await api.setPrefs({ [k]: v }, tid)); toast('Preference saved.'); } catch (e) { toast(e.message); } };
   return (
     <>
       <h2>Aarti and reminders</h2><Banner cfg={cfg} />
       <div className="g2" style={{ marginTop: 12 }}>
-        <div className="card"><h3>Typical aarti timings</h3><table><tbody>{AARTI.map(x => <tr key={x[0]}><td>{x[0]}</td><td style={{ textAlign: 'right' }}>{x[1]}</td></tr>)}</tbody></table>
-          <p className="sm mut">Timings change with season and festivals. Aarti entry follows the temple's own rules. DarshanQ covers darshan slots only.</p></div>
+        <div className="card"><h3>Typical aarti timings · {temple.name}</h3><table><tbody>{temple.aarti.map(x => <tr key={x[0]}><td>{x[0]}</td><td style={{ textAlign: 'right' }}>{x[1]}</td></tr>)}</tbody></table>
+          <p className="sm mut">These are sample timings. They change with season and festivals, so confirm with the temple. Aarti entry follows the temple's own rules. DarshanQ covers darshan slots only.</p></div>
         <div className="card"><h3>Your reminders</h3>
           {rem.length ? rem.map(r => <div key={r} className="lane on sm">{r}</div>) : <p className="mut">Reserve a slot to see reminders here.</p>}
           <label className="row" style={{ fontWeight: 500 }}><input type="checkbox" checked={user.prefs.sms} onChange={e => pref('sms', e.target.checked)} /> Text me 1 hour before</label>
@@ -262,25 +261,29 @@ function Aarti({ cfg }) {
 
 /* ---------- shell ---------- */
 export default function Portal() {
-  const { user, logout, toast } = useApp();
+  const { user, logout, toast, temples, tid, setTid } = useApp();
   const [view, setView] = useState('overview'), [day, setDay] = useState(0), [fs, setFs] = useState(false);
-  const [cfg, setCfg] = useState(null), [rep, setRep] = useState(false), [mins, setMins] = useState(20);
-  const loadCfg = useCallback(() => api.config().then(setCfg).catch(() => {}), []);
+  const [cfg, setCfg] = useState(null), [rep, setRep] = useState(null), [mins, setMins] = useState(20);
+  const loadCfg = useCallback(() => api.config(tid).then(setCfg).catch(() => {}), [tid]);
   useEffect(() => { loadCfg(); }, [view, loadCfg]);
 
   const go = v => { setView(v); window.scrollTo({ top: 0 }); };
   const menu = [['overview', 'Overview'], ['book', 'Reserve a slot'], ['passes', 'My passes'], ['trust', 'Trust score'], ['aarti', 'Aarti & reminders'], ...(user.role === 'admin' ? [['admin', 'Temple admin']] : [])];
-  const sendRep = async () => { try { await api.report(mins); toast('Thanks. The forecast now uses your report.'); setRep(false); } catch (e) { toast(e.message); } };
+  const sendRep = async () => { try { await api.report(rep, mins); toast('Thanks. The forecast now uses your report.'); setRep(null); } catch (e) { toast(e.message); } };
   const reset = async () => {
     if (!window.confirm('Delete your demo account and bookings?')) return;
     try { await api.deleteMe(); logout(); toast('Demo data cleared.'); } catch (e) { toast(e.message); }
   };
 
   return (
-    <PortalCtx.Provider value={{ go, day, setDay, askReport: () => { setMins(20); setRep(true); } }}>
+    <PortalCtx.Provider value={{ go, day, setDay, askReport: tp => { setMins(20); setRep(tp); } }}>
       <header className="top"><div className="wrap">
         <span className="logo">Darshan<b>Q</b></span>
-        <div className="row"><span className="mut sm">{user.name}</span><button className="btn sm" onClick={logout}>Sign out</button></div>
+        <div className="row">
+          <select aria-label="Choose temple" value={tid} onChange={e => { setTid(e.target.value); setDay(0); }} style={{ width: 'auto' }}>
+            {temples.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <span className="mut sm">{user.name}</span><button className="btn sm" onClick={logout}>Sign out</button></div>
       </div></header>
       <div className="wrap layout">
         <aside className="side">
@@ -298,12 +301,12 @@ export default function Portal() {
           {view === 'admin' && user.role === 'admin' && <Admin onConfig={loadCfg} />}
         </section>
       </div>
-      <Modal open={rep} onClose={() => setRep(false)}>
+      <Modal open={!!rep} onClose={() => setRep(null)}>
         <h3>How long did you wait?</h3>
         <p className="sm mut">Your report improves the crowd forecast for everyone.</p>
         <label htmlFor="rm">Minutes in queue: <b>{mins}</b></label>
         <input type="range" id="rm" min="5" max="240" step="5" value={mins} onChange={e => setMins(+e.target.value)} />
-        <div className="row" style={{ marginTop: 14 }}><button className="btn pri" onClick={sendRep}>Submit report</button><button className="btn sm" onClick={() => setRep(false)}>Skip</button></div>
+        <div className="row" style={{ marginTop: 14 }}><button className="btn pri" onClick={sendRep}>Submit report</button><button className="btn sm" onClick={() => setRep(null)}>Skip</button></div>
       </Modal>
     </PortalCtx.Provider>
   );

@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useApp } from '../App.jsx';
 import { Forecast, useCrowd } from '../components/ui.jsx';
 import { calcScore, hm, tierOf } from '../util';
 
 export default function Landing({ onLogin }) {
+  const { temples, temple, tid, setTid } = useApp();
   const [fs, setFs] = useState(false);
-  const crowd = useCrowd(fs);
+  const crowd = useCrowd(tid, fs);
   const [c, setC] = useState(6), [st, setSt] = useState(2), [ns, setNs] = useState(0);
   const v = calcScore(c, st, ns);
 
@@ -21,7 +23,7 @@ export default function Landing({ onLogin }) {
       <main id="home">
         <section className="hero"><div className="wrap g2" style={{ alignItems: 'center' }}>
           <div>
-            <p className="sm" style={{ fontWeight: 700, color: 'var(--saf)' }}>Free priority for verified local devotees</p>
+            <p className="sm" style={{ fontWeight: 700, color: 'var(--saf)' }}>Free priority for verified local devotees at {temples.length || 5} temples</p>
             <h1>Regular devotion deserves a place in the queue.</h1>
             <p className="lead">Today you either pay for VIP or wait in the general line. DarshanQ adds a free third lane, earned through verified, completed visits rather than money or who books first.</p>
             <div className="row" style={{ marginTop: 24 }}>
@@ -31,7 +33,10 @@ export default function Landing({ onLogin }) {
           </div>
           <div className="card dark">
             <div className="row sp">
-              <span><span className="dot"></span>Live demo · Mahakaleshwar</span>
+              <span className="row" style={{ gap: 8, flexWrap: 'nowrap' }}><span className="dot"></span>Live demo ·
+                <select aria-label="Choose temple" value={tid} onChange={e => setTid(e.target.value)} style={{ width: 'auto', padding: '4px 8px' }}>
+                  {temples.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select></span>
               <label className="sm row" style={{ margin: 0, gap: 6, fontWeight: 500 }}>
                 <input type="checkbox" checked={fs} onChange={e => setFs(e.target.checked)} /> Festival day
               </label>
@@ -47,7 +52,7 @@ export default function Landing({ onLogin }) {
 
         <section className="s" id="lanes"><div className="wrap g2">
           <div>
-            <h2>The missing third lane</h2>
+            <h2>The missing third lane at {temple.name}</h2>
             <p className="mut" style={{ fontSize: 18 }}>A local who visits every week for years gets no recognition for it. DarshanQ ranks priority by one signal that is hard to fake: <b>completed, verified check-ins.</b></p>
           </div>
           <div>

@@ -4,7 +4,7 @@ import { useApp } from '../App.jsx';
 import { Modal } from '../components/ui.jsx';
 
 export default function Login({ open, onClose }) {
-  const { setUser, toast } = useApp();
+  const { setUser, toast, temples, temple, tid, setTid } = useApp();
   const [f, setF] = useState({ name: '', phone: '', pincode: '' });
   const [otp, setOtp] = useState('');
   const [demoOtp, setDemoOtp] = useState('');
@@ -25,8 +25,10 @@ export default function Login({ open, onClose }) {
     setErr(''); setBusy(true);
     try {
       const r = await api.verify({ ...f, otp });
-      setToken(r.token); setUser(r.user); onClose();
-      if (!r.user.local) toast('Your pincode is outside Ujjain, so the free lane is locked. You can still use forecasts.');
+      setToken(r.token);
+      const me = await api.me(tid);
+      setUser(me); onClose();
+      if (!me.local) toast(`Your pincode is outside ${temple.city}, so the free lane at ${temple.name} is locked. You can still use forecasts.`);
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -39,10 +41,12 @@ export default function Login({ open, onClose }) {
         <>
           <label htmlFor="ln">Full name</label><input id="ln" autoComplete="name" value={f.name} onChange={set('name')} />
           <label htmlFor="lp">Mobile number</label><input id="lp" type="tel" inputMode="numeric" maxLength={10} placeholder="10 digits, starting 6–9" value={f.phone} onChange={set('phone')} />
-          <label htmlFor="lz">Pincode</label><input id="lz" inputMode="numeric" maxLength={6} placeholder="e.g. 456001 for Ujjain" value={f.pincode} onChange={set('pincode')} />
+          <label htmlFor="lz">Pincode</label><input id="lz" inputMode="numeric" maxLength={6} placeholder={`e.g. ${temple.demoPin || '456001'} for ${temple.city || 'Ujjain'}`} value={f.pincode} onChange={set('pincode')} />
           <div className="err">{err}</div>
           <button className="btn pri" style={{ width: '100%' }} disabled={busy} onClick={send}>Send OTP</button>
-          <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => setF({ name: 'Rohan Sharma', phone: '9826012345', pincode: '456001' })}>Use demo local profile</button>
+          <label htmlFor="ld" style={{ marginTop: 16 }}>Quick demo: fill in a local devotee profile for</label>
+          <select id="ld" value={tid} onChange={e => setTid(e.target.value)}>{temples.map(t => <option key={t.id} value={t.id}>{t.name} ({t.city})</option>)}</select>
+          <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => setF({ name: 'Rohan Sharma', phone: '9826012345', pincode: temple.demoPin })}>Use demo local profile</button>
         </>
       ) : (
         <>
