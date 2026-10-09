@@ -12,8 +12,11 @@ if (!MONGODB_URI || !JWT_SECRET) {
 }
 
 const app = express();
-app.use(cors({ origin: CLIENT_URL.split(',').map(s => s.trim()) }));
-app.use(express.json({ limit: '50kb' }));
+// CLIENT_URL: comma-separated origins. A * matches one hostname segment, e.g. https://myapp-*-team.vercel.app
+const esc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const toRegex = p => new RegExp('^' + p.split('*').map(esc).join('[^.]*') + '$');
+const origins = CLIENT_URL.split(',').map(s => s.trim()).filter(Boolean).map(toRegex);
+app.use(cors({ origin: (origin, cb) => cb(null, !origin || origins.some(r => r.test(origin))) }));app.use(express.json({ limit: '50kb' }));
 
 app.get('/api/health', (req, res) => res.json({ ok: true, db: mongoose.connection.readyState === 1 }));
 app.use('/api/auth', require('./routes/auth'));
