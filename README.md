@@ -1,5 +1,7 @@
 # DarshanQ — Verified Priority Darshan (MERN)
 
+Supports five temples: Mahakaleshwar (Ujjain), Jagannath Puri, Khatu Shyam, Sawariya Seth Ji and Vaishno Devi. Add or edit temples in `server/src/temples.js` (name, local pincodes, slot times, crowd shape, sample aarti timings). Trust score, bookings, capacity, notices and wait reports are all kept per temple.
+
 Full-stack version of the DarshanQ prototype: **React (Vite)** frontend, **Node + Express** API, **MongoDB** (Mongoose).
 All business rules (trust score, slot quotas, check-in window, penalties) now run on the server and are stored in MongoDB.
 
@@ -26,7 +28,7 @@ In Atlas, make sure your IP is allowed (Network Access) and the database user ha
 ## Demo logins
 
 - OTP is simulated. The demo code is `482910` (set `DEMO_OTP` in `.env`).
-- **Local devotee:** use "Use demo local profile" (phone 9826012345, pincode 456001). Pincodes 456001–456010 count as Ujjain locals and start with 9 imported check-ins, so the free lane is unlocked.
+- **Local devotee:** pick a temple in the login box and press "Use demo local profile". It fills in a pincode that counts as local for that temple, and local devotees start with 9 imported check-ins, so the free lane is unlocked there. Locality is decided by pincode per temple, so a profile local to one temple is a visitor at the others.
 - **Visitor:** any other pincode. Free lane stays locked, forecasts still work.
 - **Temple admin:** log in with a phone number listed in `ADMIN_PHONES` (default `9999999999`). The "Temple admin" menu appears only for admins.
 
@@ -35,7 +37,8 @@ In Atlas, make sure your IP is allowed (Network Access) and the database user ha
 ```
 server/src
   server.js          Express app, CORS, MongoDB connection, optional static serving of client/dist
-  models.js          User, Booking, Config (pause/capacity/notice), Report (wait times)
+  temples.js         the temple catalogue (edit this to change temples)
+  models.js          User, Standing (trust record per temple), Booking, Config (per temple), Report
   utils.js           slots, crowd model, trust-score formula, IST date helpers
   services.js        shared queries and response shaping
   middleware.js      JWT auth + admin guard
